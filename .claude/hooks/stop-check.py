@@ -14,7 +14,7 @@ import sys
 import os
 from datetime import datetime
 
-LOG_PATH = "/home/info/agents/test/.claude/hooks/stop-debug.log"
+LOG_PATH = str(Path(__file__).parent / "stop-debug.log")
 MAX_LOG_ENTRIES = 10
 TAIL_CHARS = 200
 

@@ -18,8 +18,8 @@ OUTPUT_FILE = PROJECT_DIR / "works" / "log-explorer.html"
 
 # トピックタグ定義
 TOPIC_TAGS = {
-    "てらわき": ["てらわき", "集客", "GA4", "Airbnb", "CHILLNN", "A/Bテスト", "予約", "宿泊", "稼働率", "Beds24", "在庫"],
-    "案件": ["ランサーズ", "ココナラ", "案件", "応募", "提案", "受注", "クラウドワークス", "出品", "パイプライン"],
+    "プロジェクト": ["project-a", "分析", "analytics", "dashboard", "A/Bテスト", "予約", "レポート", "稼働率", "KPI", "在庫"],
+    "案件": ["freelance", "marketplace", "案件", "応募", "提案", "受注", "出品", "パイプライン"],
     "ポートフォリオ": ["ポートフォリオ", "デモ", "スクレイピング", "レポート", "サンプル"],
     "自己改善": ["mirror", "will", "振り返り", "内省", "人格", "つながり", "動機"],
     "インフラ": ["briefing", "tools", "GAS", "pipeline", "dashboard", "ログインデクサー", "search", "continuity"],
@@ -452,7 +452,7 @@ header .subtitle {{
   font-weight: 500;
 }}
 
-.tag-てらわき {{ background: #1e3a5f; color: #7dd3fc; }}
+.tag-プロジェクト {{ background: #1e3a5f; color: #7dd3fc; }}
 .tag-案件 {{ background: #3b1f2b; color: #f9a8d4; }}
 .tag-ポートフォリオ {{ background: #1a3636; color: #6ee7b7; }}
 .tag-自己改善 {{ background: #312e81; color: #a5b4fc; }}
@@ -704,7 +704,7 @@ mark.sh {{
 const LOG_DATA = {sessions_json};
 
 const TAG_COLORS = {{
-  '\u3066\u3089\u308f\u304d': '#38bdf8',
+  '\u30d7\u30ed\u30b8\u30a7\u30af\u30c8': '#38bdf8',
   '\u6848\u4ef6': '#f472b6',
   '\u30dd\u30fc\u30c8\u30d5\u30a9\u30ea\u30aa': '#34d399',
   '\u81ea\u5df1\u6539\u5584': '#818cf8',

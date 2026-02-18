@@ -61,11 +61,11 @@ def classify_bullet(bullet: str) -> list[str]:
     tags = []
     lower = bullet.lower()
 
-    terawaki_keywords = [
-        "てらわき", "terawaki", "chillnn", "beds24", "予約", "稼働率",
-        "airbnb", "ga4", "search console", "a/b", "abテスト",
-        "集客", "swell", "リスティング", "ota", "インデックス",
-        "リピーター", "チャネル", "gtm", "転換率", "古民家",
+    project_keywords = [
+        "project-a", "analysis", "dashboard", "予約", "稼働率",
+        "analytics", "metrics", "search console", "a/b", "abテスト",
+        "マーケティング", "最適化", "レポート", "kpi", "インデックス",
+        "改善", "チャネル", "コンバージョン", "転換率", "施設",
         "フィードバック", "提案", "ブランド",
     ]
     philosophy_keywords = [
@@ -77,17 +77,17 @@ def classify_bullet(bullet: str) -> list[str]:
         "判断日誌", "decision", "仕組み", "自律",
     ]
     business_keywords = [
-        "ココナラ", "coconala", "ランサーズ", "lancers", "クラウドワークス",
-        "案件", "応募", "提案", "出品", "受注", "納品", "公開リクエスト",
-        "公開依頼", "単価", "報酬", "見積",
+        "proposal", "freelance", "application", "marketplace",
+        "案件", "応募", "提案", "出品", "受注", "納品",
+        "依頼", "単価", "報酬", "見積",
     ]
     practical_keywords = [
-        "pdf", "印刷", "プリンター", "事業", "トレード",
+        "pdf", "印刷", "プリンター", "事業", "運用",
     ]
 
-    for kw in terawaki_keywords:
+    for kw in project_keywords:
         if kw in lower:
-            tags.append("てらわき")
+            tags.append("プロジェクト")
             break
     for kw in philosophy_keywords:
         if kw in lower:
@@ -261,7 +261,7 @@ def generate_index(logs: list[dict]) -> str:
 
     lines.extend(["", "---", "", "## トピック別", ""])
     # トピックを固定順序で出力
-    topic_order = ["てらわき", "ビジネス・案件", "思考・哲学", "インフラ・仕組み", "実務", "その他"]
+    topic_order = ["プロジェクト", "ビジネス・案件", "思考・哲学", "インフラ・仕組み", "実務", "その他"]
     for topic in topic_order:
         if topic in topics:
             lines.append(f"### {topic}")

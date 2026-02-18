@@ -146,7 +146,7 @@ def classify_action(text):
         categories.append('委譲')
 
     # 実務・ビジネス活動
-    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', 'ランサーズ', 'ココナラ', 'クラウドワークス', '市場調査']):
+    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', 'freelance', 'marketplace', '依頼', '市場調査']):
         categories.append('実務')
 
     return categories

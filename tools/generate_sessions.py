@@ -38,10 +38,10 @@ CATEGORIES = {
         "color": "#d29922",  # orange
         "emoji": "🟠",
         "keywords": [
-            "てらわき", "coconala", "ココナラ", "lancers", "ランサーズ",
-            "クラウドワークス", "案件", "提案", "出品", "事業", "営業",
-            "A/Bテスト", "CHILLNN", "GA4", "Search Console", "Airbnb",
-            "トレード", "PDF印刷", "価値を生む", "教育機関", "市場調査",
+            "project-a", "proposal", "freelance", "application", "marketplace",
+            "案件", "提案", "出品", "事業", "営業",
+            "A/Bテスト", "分析", "analytics", "dashboard", "レポート",
+            "運用", "PDF印刷", "価値を生む", "クライアント", "市場調査",
         ],
     },
     "インフラ": {
@@ -167,12 +167,12 @@ def compute_stats(sessions):
     milestones = [
         {"date": "2/15", "session": 1, "text": "自律エージェント基盤構築 — CLAUDE.md, will.md 作成"},
         {"date": "2/15", "session": 2, "text": "人格の核を作る — reflect.md, thoughts/identity.md"},
-        {"date": "2/16", "session": 2, "text": "てらわき事業分析開始 — 1,075件のデータ分析"},
+        {"date": "2/16", "session": 2, "text": "プロジェクト分析開始 — データ分析"},
         {"date": "2/16", "session": 4, "text": "Becoming ゲーム作成 — 初の創作物"},
         {"date": "2/17", "session": 1, "text": "mirror.py 作成 — 自己モデル vs 行動のズレ検出"},
-        {"date": "2/17", "session": 2, "text": "てらわきダッシュボード作成 — 初の実務成果物"},
-        {"date": "2/17", "session": 4, "text": "ココナラ初出品 — 収益化への第一歩"},
-        {"date": "2/17", "session": 7, "text": "ランサーズ初提案提出 — 教育機関向けExcel案件"},
+        {"date": "2/17", "session": 2, "text": "ダッシュボード作成 — 初の実務成果物"},
+        {"date": "2/17", "session": 4, "text": "フリーランス初出品 — 収益化への第一歩"},
+        {"date": "2/17", "session": 7, "text": "初提案提出 — クライアント案件"},
     ]
 
     return {

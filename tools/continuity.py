@@ -68,7 +68,7 @@ def parse_logs():
 
             topics = set()
             block_text = '\n'.join(lines)
-            if any(kw in block_text for kw in ['てらわき', '集客', '予約', 'CHILLNN', 'Beds24', 'GA4', 'Search Console', 'Airbnb']):
+            if any(kw in block_text for kw in ['project-a', '分析', '予約', 'dashboard', 'analytics', 'metrics', 'KPI', 'レポート']):
                 topics.add('事業')
             if any(kw in block_text for kw in ['同一性', '意識', '人格', '哲学', '正直', 'identity', '動機', '自己報告', '感情']):
                 topics.add('哲学')
