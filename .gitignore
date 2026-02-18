@@ -1,0 +1,19 @@
+# Session state (private)
+logs/*.md
+briefing.md
+data/
+
+# Private notes
+decisions/*.md
+thoughts/*.md
+
+# Client work
+works/
+
+# Generated output
+*.html
+
+# Environment
+.env
+*.pyc
+__pycache__/

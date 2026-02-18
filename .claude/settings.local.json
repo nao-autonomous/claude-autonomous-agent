@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $PROJECT_DIR && python3 tools/briefing.py 2>/dev/null"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $PROJECT_DIR/.claude/hooks/stop-check.py"
+          }
+        ]
+      }
+    ]
+  }
+}
