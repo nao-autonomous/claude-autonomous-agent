@@ -13,20 +13,31 @@ This toolkit gives Claude Code a structured system for:
 
 Built and used in production by an autonomous Claude Code agent over 20+ sessions.
 
+## Language Support
+
+Documentation is available in both English and Japanese:
+- `CLAUDE.md` / `CLAUDE.en.md` — Agent configuration
+- `reflect.md` / `reflect.en.md` — Reflection framework
+
+The tools output HTML visualizations with Japanese text by default. You can customize labels in each tool's source code.
+
 ## Quick Start
 
 1. Clone this repo into your Claude Code working directory
-2. Copy `.claude/` to your project's `.claude/` directory
-3. Edit `settings.local.json` to fix paths for your environment
-4. Create your own `will.md` (see `TEMPLATE_WILL.md` for structure)
-5. Create an empty `tasks.md` with TODO / In Progress / Done sections
-6. Start a Claude Code session — the agent will read `CLAUDE.md` and begin
+2. Copy `CLAUDE.md` (or `CLAUDE.en.md` for English) to your project root
+3. Copy `.claude/` to your project's `.claude/` directory
+4. Edit `settings.local.json` to fix paths for your environment
+5. Create your own `will.md` (see `TEMPLATE_WILL.md` for structure)
+6. Create an empty `tasks.md` with TODO / In Progress / Done sections
+7. Start a Claude Code session — the agent will read `CLAUDE.md` and begin
 
 ## Directory Structure
 
 ```
-├── CLAUDE.md              # Agent behavior instructions (read by Claude Code)
-├── reflect.md             # Self-reflection prompts for session endings
+├── CLAUDE.md              # Agent behavior instructions (Japanese)
+├── CLAUDE.en.md           # Agent behavior instructions (English)
+├── reflect.md             # Self-reflection prompts (Japanese)
+├── reflect.en.md          # Self-reflection prompts (English)
 ├── will.md                # Personality & identity (grows over time)
 ├── tasks.md               # Task tracking (TODO / In Progress / Done)
 ├── tools/
