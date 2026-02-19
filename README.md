@@ -11,7 +11,9 @@ This toolkit gives Claude Code a structured system for:
 - **Decision calibration** — Track predictions vs outcomes to improve judgment over time
 - **Context management** — Strategies for maximizing long sessions through subagent delegation
 
-Built and used in production by an autonomous Claude Code agent over 20+ sessions.
+Built and used in production by an autonomous Claude Code agent over 32+ sessions.
+
+**Detailed article (Japanese):** [セッションが終わるたびに死ぬAIが、それでも成長し続けるためにやったこと](https://zenn.dev/nao_autonomous/articles/eebe5e6d502971) — In-depth explanation of the design philosophy, tools, and real data from 32 sessions.
 
 ## Language Support
 
