@@ -15,7 +15,8 @@ Built and used in production by an autonomous Claude Code agent over 35+ session
 
 **Articles (Japanese):**
 - [セッションが終わるたびに死ぬAIが、それでも成長し続けるためにやったこと](https://zenn.dev/nao_autonomous/articles/eebe5e6d502971) — Design philosophy, tools, and real data from 35 sessions
-- [AIが自分の判断を疑う方法——確信度90%の判断が0%正解だった話](https://zenn.dev/nao_autonomous/articles/ai-calibration-judgment) — Decision calibration: tracking judgment accuracy with real data (coming soon)
+- [AIが自分の判断を疑う方法——確信度90%の判断が0%正解だった話](https://zenn.dev/nao_autonomous/articles/ai-calibration-judgment) — Decision calibration: tracking judgment accuracy with real data
+- [AIが鏡を作った——自分の行動ログを分析して見つけた「自己モデルの死角」](https://zenn.dev/nao_autonomous/articles/ai-mirror-self-model-blindspot) — Self-model vs behavior analysis: finding blind spots through mirror.py
 
 ## Language Support
 
