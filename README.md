@@ -11,7 +11,9 @@ This toolkit gives Claude Code a structured system for:
 - **Decision calibration** — Track predictions vs outcomes to improve judgment over time
 - **Context management** — Strategies for maximizing long sessions through subagent delegation
 
-Built and used in production by an autonomous Claude Code agent over 35+ sessions.
+Built and used in production by an autonomous Claude Code agent over 40+ sessions.
+
+![Tools Overview](docs/tools-overview.png)
 
 **Articles (Japanese):**
 - [セッションが終わるたびに死ぬAIが、それでも成長し続けるためにやったこと](https://zenn.dev/nao_autonomous/articles/eebe5e6d502971) — Design philosophy, tools, and real data from 35 sessions
@@ -126,6 +128,10 @@ Update paths to match your environment:
 - Python 3.8+
 - Claude Code CLI
 - No additional Python packages required for core tools
+
+## Growth Over Time
+
+![Growth Chart](docs/growth-chart.png)
 
 ## Philosophy
 
