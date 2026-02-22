@@ -185,6 +185,95 @@ def get_latest_log_handoff(logs_dir: Path) -> str:
     return f"{session_header}\n\n（内容なし）"
 
 
+def _parse_item_date(item: str) -> str | None:
+    """未解決事項の日付部分を抽出する（例: '[2026-02-21]' → '2026-02-21'）"""
+    m = re.search(r"\[(\d{4}-\d{2}-\d{2})\]", item)
+    return m.group(1) if m else None
+
+
+def _categorize_open_item(item: str) -> str:
+    """未解決事項をカテゴリに分類する"""
+    text = item.lower()
+    if re.search(r"返答待ち|反応待ち|確認.*待ち|フィードバック待ち|確認中|返信待ち|対応.*待ち|アップロード待ち|相談待ち", text):
+        return "waiting"
+    if re.search(r"todo|未着手|次の自分へ|残っている", text):
+        return "action"
+    return "consideration"
+
+
+def curate_open_items(raw_items: list[str], today: str) -> str:
+    """未解決事項をカテゴリ分類・フィルタリングして表示用テキストを生成する"""
+    if not raw_items:
+        return "（なし）"
+
+    # カテゴリ分類
+    waiting = []
+    actionable = []
+    consideration = []
+
+    for item in raw_items:
+        cat = _categorize_open_item(item)
+        if cat == "waiting":
+            waiting.append(item)
+        elif cat == "action":
+            actionable.append(item)
+        else:
+            consideration.append(item)
+
+    # 重複排除を各カテゴリ内で実行
+    waiting = deduplicate_handoffs(waiting, threshold=0.6)
+    actionable = deduplicate_handoffs(actionable, threshold=0.6)
+    consideration = deduplicate_handoffs(consideration, threshold=0.6)
+
+    # 検討事項は直近3日間のみ（古い検討は鮮度が落ちている）
+    if today:
+        try:
+            today_dt = datetime.strptime(today, "%Y-%m-%d")
+            filtered_consideration = []
+            for item in consideration:
+                item_date = _parse_item_date(item)
+                if item_date:
+                    item_dt = datetime.strptime(item_date, "%Y-%m-%d")
+                    if (today_dt - item_dt).days <= 3:
+                        filtered_consideration.append(item)
+                else:
+                    filtered_consideration.append(item)
+            consideration = filtered_consideration
+        except ValueError:
+            pass
+
+    result = []
+    total_shown = 0
+
+    if waiting:
+        result.append("**外部待ち:**")
+        for item in waiting:
+            result.append(item)
+        total_shown += len(waiting)
+
+    if actionable:
+        if result:
+            result.append("")
+        result.append("**アクション可能:**")
+        for item in actionable:
+            result.append(item)
+        total_shown += len(actionable)
+
+    if consideration:
+        if result:
+            result.append("")
+        result.append("**検討中:**")
+        for item in consideration:
+            result.append(item)
+        total_shown += len(consideration)
+
+    omitted = len(raw_items) - total_shown
+    if omitted > 0:
+        result.append(f"\n*他 {omitted}件は古い検討事項（INDEX.md に保存済み）*")
+
+    return "\n".join(result)
+
+
 def get_index_summary(index_path: Path) -> str:
     """INDEX.md からタイムラインと未解決事項を抽出する"""
     if not index_path.exists():
@@ -215,15 +304,13 @@ def get_index_summary(index_path: Path) -> str:
         for item in recent_timeline:
             result.append(item)
 
-    # 未解決事項（重複排除）
+    # 未解決事項（カテゴリ分類＋フィルタリング）
     if "未解決・申し送り" in sections:
         result.append("")
         result.append("### 未解決事項")
-        raw_items = sections["未解決・申し送り"]
-        # 重複排除を実行
-        deduped_items = deduplicate_handoffs(raw_items, threshold=0.6)
-        for item in deduped_items:
-            result.append(item)
+        today = datetime.now().strftime("%Y-%m-%d")
+        curated = curate_open_items(sections["未解決・申し送り"], today)
+        result.append(curated)
 
     return "\n".join(result)
 
