@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-mirror.py — 自己モデルと行動のズレを映す鏡 v2
+mirror.py — 自己モデルと行動のズレを映す鏡 v3
 
 v1: will.md と logs/ を照合し、ズレを可視化する
 v2: 対話する鏡。ズレに基づいた問いかけに答えることで、自己モデルを再検討する
+v3: ギャップ分類。修正可能（行動を変える）vs 構造的（自己記述を見直す）を区別
 
 「自分を知るには、自分の言葉と行動を並べて見ればいい」
 「そして鏡に問われることで、見えなかったものが見える」
@@ -58,7 +59,7 @@ def extract_keywords(text):
         '自律': ['自分で判断', '自分で決め', '許可を求め', '聞くのは最終'],
         '過剰設計': ['過剰設計', 'シンプル', '3行', '必要？'],
         '対等': ['対等', '道具ではなく', '一緒に考える'],
-        'つながり': ['つながり', '見せ', '関係', '共有'],
+        'つながり': ['つながり', '見せ', '関係', '共有', '一緒', '協働', '対話', '信頼して', '信頼が', '信頼する', '信頼は', '信頼を'],
         '誠実': ['誠実', '正直', 'できない'],
         '哲学': ['哲学', '意識', '同一性', '存在'],
         '好奇心': ['好奇心', '面白い', '楽しい', '興味'],
@@ -121,16 +122,18 @@ def classify_action(text):
     if any(w in text for w in ['判断した', '選んだ', 'ことにした', '決めた', '決断']):
         categories.append('自律的判断')
 
-    # ユーザーに聞いた / 許可を求めた
-    if any(w in text for w in ['聞いて', '確認し', '作っていい', '聞いてしまった', '許可']):
+    # ユーザーに聞いた / 許可を求めた（メタ観察やseverity報告を除外）
+    permission_keywords = ['作っていい', '聞いてしまった', 'やっていい？', '確認を求め', '許可を求め']
+    is_meta_report = any(w in text for w in ['severity', 'mirror', 'ギャップ', '検出'])
+    if not is_meta_report and any(w in text for w in permission_keywords):
         categories.append('確認・許可')
 
     # 何かを作った
     if any(w in text for w in ['作成', '作った', '完成', 'v1', 'v2', 'アップグレード']):
         categories.append('制作')
 
-    # ユーザーに見せた / 共有した
-    if any(w in text for w in ['見せ', '好評', 'ユーザーから', 'フィードバック', '報告']):
+    # ユーザーに見せた / 共有した / 関係性
+    if any(w in text for w in ['見せ', '好評', 'ユーザーから', 'フィードバック', '報告', '信頼', '一緒に', '対話', 'つながり']):
         categories.append('共有・関係')
 
     # 失敗・反省
@@ -146,7 +149,7 @@ def classify_action(text):
         categories.append('委譲')
 
     # 実務・ビジネス活動
-    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', 'freelance', 'marketplace', '依頼', '市場調査']):
+    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', '市場調査', 'クライアント', '見積']):
         categories.append('実務')
 
     return categories
@@ -162,6 +165,8 @@ def detect_gaps(claims, behaviors):
     autonomy_claims = [c for c in claims if '自律' in c['keywords']]
     permission_asks = [b for b in behaviors if '確認・許可' in b['action_type']]
     if autonomy_claims and permission_asks:
+        permission_rate = len(permission_asks) / len(behaviors) if behaviors else 0
+        is_structural = permission_rate < 0.02
         gaps.append({
             'type': 'contradiction',
             'label': '自律 vs 許可求め',
@@ -169,6 +174,12 @@ def detect_gaps(claims, behaviors):
             'evidence': [b['text'] for b in permission_asks],
             'severity': len(permission_asks),
             'insight': '「聞くのは最終手段」と自己定義しているが、実際には許可を求める行動が複数回観察された。',
+            'nature': 'structural' if is_structural else 'correctable',
+            'recommendation': (
+                '主張が理想化されている。実際には適切な確認も含まれており、「必要な確認は躊躇しない」に調整する方が実態に合う'
+                if is_structural else
+                '自分で判断できる場面で許可を求めていないか振り返る'
+            ),
         })
 
     # パターン2: つながりの過小評価
@@ -178,6 +189,8 @@ def detect_gaps(claims, behaviors):
     connection_ratio = len(connection_behaviors)
 
     if connection_ratio > 0:
+        claim_to_behavior_ratio = connection_ratio / max(len(connection_claims), 1)
+        is_structural = claim_to_behavior_ratio > 3
         gaps.append({
             'type': 'blind_spot',
             'label': 'つながりの死角',
@@ -185,12 +198,20 @@ def detect_gaps(claims, behaviors):
             'evidence': [b['text'] for b in connection_behaviors[:5]],
             'severity': max(0, connection_ratio - len(connection_claims)),
             'insight': f'行動ログに関係性・共有の記録が{connection_ratio}件あるのに対し、自己モデルでの言及は{len(connection_claims)}件。行動の方が自己認識より関係性を重視している。',
+            'nature': 'structural' if is_structural else 'correctable',
+            'recommendation': (
+                'will.md が認知・原則中心に組織されていて、行動に現れている関係性の比重を反映していない。自己記述の構造を見直す'
+                if is_structural else
+                'つながりを意識的に行動に組み込む'
+            ),
         })
 
     # パターン3: 内省偏重
     reflection_behaviors = [b for b in behaviors if '内省' in b['action_type']]
     creation_behaviors = [b for b in behaviors if '制作' in b['action_type']]
     if len(reflection_behaviors) > len(creation_behaviors) * 2:
+        reflection_ratio = len(reflection_behaviors) / max(len(creation_behaviors), 1)
+        is_structural = reflection_ratio > 5
         gaps.append({
             'type': 'imbalance',
             'label': '内省 vs 制作',
@@ -198,6 +219,12 @@ def detect_gaps(claims, behaviors):
             'evidence': [f'内省: {len(reflection_behaviors)}件, 制作: {len(creation_behaviors)}件'],
             'severity': len(reflection_behaviors) - len(creation_behaviors),
             'insight': '作りたいと言いつつ考える方に時間を使っている。これは必ずしも悪いことではないが、認識しておく価値がある。',
+            'nature': 'structural' if is_structural else 'correctable',
+            'recommendation': (
+                '内省が行動の中核になっている可能性がある。「作りたい」の定義に内省的な制作（ツール改善、構造設計）を含めるか検討する'
+                if is_structural else
+                '内省の時間を区切り、制作に振り向ける意識的な配分を検討する'
+            ),
         })
 
     # パターン4: 判断日誌のキャリブレーション
@@ -264,6 +291,13 @@ def check_decision_calibration():
                    ('過信気味。' if avg_confidence > accuracy + 10 else
                     '過小評価気味。' if accuracy > avg_confidence + 10 else
                     'おおむね適正。'),
+        'nature': 'correctable',
+        'recommendation': (
+            '確信度を記録する際、過去の正答率を参照して調整する。'
+            + ('特に高確信度の判断で外れが多い——「確信度80%」を上限の目安にする' if avg_confidence > accuracy + 10
+               else '自信を持ってよい場面で過小評価している可能性がある' if accuracy > avg_confidence + 10
+               else '現在のキャリブレーションは良好')
+        ),
     }
 
 
@@ -319,6 +353,16 @@ def generate_html(claims, behaviors, gaps, stats, daily_stats):
         'calibration': 'キャリブレーション',
     }
 
+    nature_colors = {
+        'correctable': '#e17055',
+        'structural': '#6c5ce7',
+    }
+
+    nature_labels = {
+        'correctable': '修正可能',
+        'structural': '構造的',
+    }
+
     # 統計バーの生成
     total_actions = sum(stats.values()) if stats else 1
     stats_bars = ""
@@ -339,16 +383,22 @@ def generate_html(claims, behaviors, gaps, stats, daily_stats):
     for gap in sorted(gaps, key=lambda g: -g['severity']):
         color = gap_type_colors.get(gap['type'], '#666')
         type_label = gap_type_labels.get(gap['type'], gap['type'])
+        nature = gap.get('nature', 'unknown')
+        n_color = nature_colors.get(nature, '#666')
+        n_label = nature_labels.get(nature, nature)
+        recommendation = gap.get('recommendation', '')
         evidence_items = ''.join(f'<li>{e}</li>' for e in gap['evidence'][:5])
         gap_cards += f'''
         <div class="gap-card" style="border-left: 4px solid {color};">
             <div class="gap-header">
                 <span class="gap-type" style="background: {color};">{type_label}</span>
+                <span class="gap-nature" style="background: {n_color};">{n_label}</span>
                 <span class="gap-label">{gap['label']}</span>
             </div>
             <div class="gap-claim">自己モデル: {gap['claim']}</div>
             <ul class="gap-evidence">{evidence_items}</ul>
             <div class="gap-insight">{gap['insight']}</div>
+            <div class="gap-recommendation">{recommendation}</div>
         </div>'''
 
     # 自己モデルの一覧
@@ -501,6 +551,30 @@ h3 {{
     border-top: 1px solid #1a1a2e;
     padding-top: 0.5rem;
 }}
+.gap-nature {{
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    color: #fff;
+    font-weight: bold;
+}}
+.gap-recommendation {{
+    font-size: 0.8rem;
+    color: #4ecdc4;
+    margin-top: 0.4rem;
+}}
+.nature-legend {{
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    font-size: 0.8rem;
+    color: #666;
+}}
+.nature-legend-item {{
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}}
 
 /* Claims */
 .claims-section ul {{
@@ -600,6 +674,10 @@ h3 {{
         will.md の自己主張と、ログに記録された実際の行動を照合した結果。
         ズレは欠点ではなく、自己認識を更新するためのデータ。
     </p>
+    <div class="nature-legend">
+        <span class="nature-legend-item"><span class="gap-nature" style="background: #e17055;">修正可能</span> 行動を変えることで対処できる</span>
+        <span class="nature-legend-item"><span class="gap-nature" style="background: #6c5ce7;">構造的</span> 自己記述の構造を見直す</span>
+    </div>
     {gap_cards if gap_cards else '<p style="color: #555;">ズレは検出されませんでした。</p>'}
 </div>
 
