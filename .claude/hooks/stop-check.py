@@ -13,9 +13,8 @@ import re
 import sys
 import os
 from datetime import datetime
-from pathlib import Path
 
-LOG_PATH = str(Path(__file__).parent / "stop-debug.log")
+LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stop-debug.log")
 MAX_LOG_ENTRIES = 10
 TAIL_CHARS = 200
 

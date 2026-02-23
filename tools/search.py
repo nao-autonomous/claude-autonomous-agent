@@ -248,7 +248,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 例:
-  python3 tools/search.py "提案"
+  python3 tools/search.py "ココナラ"
   python3 tools/search.py -r "転換率.*%%"
   python3 tools/search.py -n 5 "mirror"
   python3 tools/search.py --count "判断"

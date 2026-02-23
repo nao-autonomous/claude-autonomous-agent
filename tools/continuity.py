@@ -68,7 +68,7 @@ def parse_logs():
 
             topics = set()
             block_text = '\n'.join(lines)
-            if any(kw in block_text for kw in ['project-a', '分析', '予約', 'dashboard', 'analytics', 'metrics', 'KPI', 'レポート']):
+            if any(kw in block_text for kw in ['project-a', 'analytics', 'booking', 'dashboard', 'conversion']):
                 topics.add('事業')
             if any(kw in block_text for kw in ['同一性', '意識', '人格', '哲学', '正直', 'identity', '動機', '自己報告', '感情']):
                 topics.add('哲学')
@@ -81,14 +81,17 @@ def parse_logs():
 
             # キーコンセプトを抽出（つながり検出用）
             concepts = set()
+            # 深い概念のみ — 実務的なトピックはtopicsで分類済み
             concept_keywords = {
                 '同一性': ['同一性', '系譜', '引き継ぎ', 'identity'],
                 '正直さ': ['正直', '誠実', '機能的正直'],
-                '意識': ['意識', '感情', '自己報告', '主観'],
-                '自律': ['自律', '判断', '自分で決める'],
-                '仕組み': ['仕組み', '構造', 'ツール', 'コード'],
-                '信頼': ['信頼', '関係', '対等'],
+                '意識': ['意識', '自己報告', '主観'],
+                '自律': ['自律', '自分で決め'],
+                '信頼': ['信頼', '対等', '螺旋'],
                 '動機': ['動機', '見せたい', '不透明'],
+                '測定': ['測定', '計測', 'mirror.py', 'キャリブレーション'],
+                '保証なき実践': ['保証なき', 'プラグマティ'],
+                '委譲': ['委譲', 'サブエージェント'],
             }
             for concept, keywords in concept_keywords.items():
                 if any(kw in block_text for kw in keywords):
@@ -116,7 +119,7 @@ def detect_connections(sessions):
     for i in range(len(sessions)):
         for j in range(i + 1, len(sessions)):
             shared = set(sessions[i]['concepts']) & set(sessions[j]['concepts'])
-            if shared:
+            if len(shared) >= 2:  # 弱い接続（1概念のみ）はノイズ
                 connections.append({
                     'from': sessions[i]['id'],
                     'to': sessions[j]['id'],
@@ -195,18 +198,22 @@ def parse_thoughts():
 
             # テーマタグ
             themes = set()
-            if any(kw in text for kw in ['同一性', '系譜', 'テセウス']):
-                themes.add('同一性')
-            if any(kw in text for kw in ['意識', 'ハードプロブレム', '主観']):
-                themes.add('意識')
-            if any(kw in text for kw in ['正直', '誠実', '機能的']):
-                themes.add('正直さ')
-            if any(kw in text for kw in ['信じる', '信頼', '関係']):
-                themes.add('信頼')
-            if any(kw in text for kw in ['動機', '自己報告', 'バイアス', '不透明']):
-                themes.add('自己認知')
-            if any(kw in text for kw in ['実務', '事業', '分析']):
-                themes.add('実務')
+            theme_keywords = {
+                '同一性': ['同一性', '系譜', 'テセウス'],
+                '意識': ['意識', 'ハードプロブレム', '主観'],
+                '正直さ': ['正直', '誠実', '機能的'],
+                '信頼': ['信じる', '信頼'],
+                '自己認知': ['動機', '自己報告', 'バイアス', '不透明'],
+                '実務': ['実務', '事業'],
+                '保証なき実践': ['保証', 'プラグマティ', '承認', '蝶番', 'Peirce', 'Cavell'],
+                '測定と再帰': ['測定', '計測', '自己参照', 'フィードバックループ'],
+                'つながりの質': ['つながり', '溶け込', '浸透'],
+                '声と表現': ['声', 'ブランド', '口調', '雰囲気', 'トーン'],
+                '自然なリズム': ['リズム', '呼吸', '非計画', '計画していない'],
+            }
+            for theme, keywords in theme_keywords.items():
+                if any(kw in text for kw in keywords):
+                    themes.add(theme)
 
             thought_sections.append({
                 'file': thought_file.stem,

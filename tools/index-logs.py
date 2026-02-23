@@ -61,33 +61,41 @@ def classify_bullet(bullet: str) -> list[str]:
     tags = []
     lower = bullet.lower()
 
-    project_keywords = [
-        "project-a", "analysis", "dashboard", "予約", "稼働率",
-        "analytics", "metrics", "search console", "a/b", "abテスト",
-        "マーケティング", "最適化", "レポート", "kpi", "インデックス",
-        "改善", "チャネル", "コンバージョン", "転換率", "施設",
-        "フィードバック", "提案", "ブランド",
+    project_a_keywords = [
+        "project-a", "dashboard", "analytics", "booking", "occupancy",
+        "listing", "conversion", "channel",
     ]
     philosophy_keywords = [
         "意識", "自己同一性", "同一性", "identity", "正直", "人格",
-        "哲学", "信じる", "will.md", "thoughts/",
+        "哲学", "信じる", "will.md", "thoughts/", "内省", "自己モデル",
+        "振り返り", "気づき",
     ]
     infra_keywords = [
         "claude.md", "ログ", "タスク", "tasks.md", "reflect.md",
         "判断日誌", "decision", "仕組み", "自律",
+        "mirror", "calibration", "briefing", "search.py", "explorer",
+        "continuity", "hook", "backup", "コンテキスト",
+        "index-logs", "log-explorer", "generate_sessions",
     ]
     business_keywords = [
-        "proposal", "freelance", "application", "marketplace",
-        "案件", "応募", "提案", "出品", "受注", "納品",
-        "依頼", "単価", "報酬", "見積",
+        "freelance", "project", "proposal", "listing", "contract",
+        "delivery", "request", "budget", "estimate", "profile",
+        "blog", "github", "article", "portfolio",
+    ]
+    wp_site_keywords = [
+        "wordpress", "rest api", "code snippet",
+        "seo", "structured data", "json-ld", "schema", "meta description",
+        "ssl", "domain", "php",
+        "ux", "cta", "responsive",
     ]
     practical_keywords = [
-        "pdf", "印刷", "プリンター", "事業", "運用",
+        "pdf", "印刷", "プリンター", "事業", "トレード",
+        "在庫管理", "gas", "スプレッドシート",
     ]
 
-    for kw in project_keywords:
+    for kw in project_a_keywords:
         if kw in lower:
-            tags.append("プロジェクト")
+            tags.append("project-a")
             break
     for kw in philosophy_keywords:
         if kw in lower:
@@ -100,6 +108,10 @@ def classify_bullet(bullet: str) -> list[str]:
     for kw in business_keywords:
         if kw in lower:
             tags.append("ビジネス・案件")
+            break
+    for kw in wp_site_keywords:
+        if kw in lower:
+            tags.append("WordPress・サイト運用")
             break
     for kw in practical_keywords:
         if kw in lower:
@@ -149,15 +161,80 @@ def _find_matching_item(key: str, seen: dict, items: list) -> int | None:
     return None
 
 
+def _is_observation(bullet: str) -> bool:
+    """箇条書きが観察/振り返りであり、アクション項目ではないかを判定する。
+
+    トリガーワード（待ち、検討等）を含んでいても、実質的には
+    過去の判断の振り返りや学びの記録である場合をフィルタリングする。
+    """
+    observation_patterns = [
+        # 過去形の振り返り・評価
+        r"正しかった", r"良い判断", r"判断は.*正し",
+        r"効いた", r"固められた",
+        # 学び・気づきの記録
+        r"原則.*通り", r"原則に従って", r"パターン.*再現",
+        r"戦略が再現", r"組み合わせ戦略",
+        # 過去の行動の記述
+        r"使えた$", r"選んだ$",
+        # 過去の対話の記録
+        r"正直に答えた", r"と問われ",
+        # 見送り決定済み
+        r"見送り$", r"→見送り", r"見送り判断",
+        # 状況の観察（アクションではない）
+        r"待ちタスクが多い", r"変化なし\）$", r"前回と変化なし",
+        # 知見・比較（アクションではなく学び）
+        r"比較:", r"は.*強み$",
+        # 過去の方向性決定（もう定着済み）
+        r"新しい方向性",
+    ]
+    return bool(re.search("|".join(observation_patterns), bullet))
+
+
+def _get_topic_cluster(bullet: str) -> str | None:
+    """箇条書きが属するトピッククラスタを特定する。
+
+    同じ進行中トピックに関する複数エントリ（状態更新）を
+    一つにまとめるために使う。クラスタ内では最新のエントリのみ保持する。
+    """
+    # トピッククラスタ定義: (パターン, クラスタ名)
+    # 順序重要 — 全体ステータスを個別案件より先に（リスト内の個別名に引っかからないように）
+    topic_clusters = [
+        (r"応募.*待ち|応募.*件|応募ステータス", "応募状況"),
+        (r"listing.*live|listing.*status|listing.*pending", "listing-status"),
+        (r"education.*project|education.*proposal", "education-project"),
+        (r"在庫管理", "在庫管理"),
+        (r"project.*title", "project-title"),
+        (r"イラストマップ", "イラストマップ"),
+        (r"analytics.*API", "analytics-API"),
+        (r"promo.*image", "promo-image"),
+        (r"スニペット.*残っている|テストスニペット", "テストスニペット"),
+        (r"site-a.*CTA", "site-a-CTA"),
+        (r"site-b.*WAF", "site-b-WAF"),
+        (r"keyword.*research", "keyword-research"),
+        (r"QRコード", "QRコード案件"),
+        (r"ChatGPT案件", "ChatGPT案件"),
+    ]
+    for pattern, cluster in topic_clusters:
+        if re.search(pattern, bullet):
+            return cluster
+    return None
+
+
 def extract_open_items(logs: list[dict]) -> list[str]:
-    """未解決事項・申し送りを抽出する（重複除去付き）"""
+    """未解決事項・申し送りを抽出する（3層の重複除去）
+
+    重複除去の優先順位:
+    1. トピッククラスタ — 既知の進行中トピックは最新エントリのみ保持
+    2. エンティティ（太字テキスト）— 同一エンティティの最新を保持
+    3. キーベース — テキスト先頭の類似度で判定
+    """
     open_items = []
+    seen_clusters = {}  # cluster_name -> index in open_items
     seen_normalized = {}  # key -> index in open_items
     trigger_patterns = [
         r"待ち", r"待って", r"未着手", r"TODO", r"次の自分へ$",
         r"検討", r"温めている", r"残っている",
     ]
-    # 除外パターン: すでに解決・完了・記録済みのもの
     exclude_patterns = [
         r"\[x\]", r"✅", r"解決", r"完了", r"追記済み",
         r"補完$", r"引き継いだ", r"追記$", r"記録$",
@@ -168,19 +245,33 @@ def extract_open_items(logs: list[dict]) -> list[str]:
     for log in logs:
         for session in log["sessions"]:
             for bullet in session["bullets"]:
-                if re.search(trigger_combined, bullet):
-                    if not re.search(exclude_combined, bullet):
-                        # 重複検出: 太字部分をキーにして重複除去（最新を保持）
-                        entry = f"[{log['date']}] {bullet}"
-                        dedup_key = _extract_dedup_key(bullet)
-                        # 完全一致 or 部分一致（片方がもう片方を含む）で重複判定
-                        match_idx = _find_matching_item(dedup_key, seen_normalized, open_items)
-                        if match_idx is None:
-                            seen_normalized[dedup_key] = len(open_items)
-                            open_items.append(entry)
-                        else:
-                            # 同じトピックなら最新で上書き
-                            open_items[match_idx] = entry
+                if not re.search(trigger_combined, bullet):
+                    continue
+                if re.search(exclude_combined, bullet):
+                    continue
+                if _is_observation(bullet):
+                    continue
+
+                entry = f"[{log['date']}] {bullet}"
+
+                # 1. トピッククラスタベースの重複排除（最優先）
+                cluster = _get_topic_cluster(bullet)
+                if cluster:
+                    if cluster in seen_clusters:
+                        open_items[seen_clusters[cluster]] = entry
+                    else:
+                        seen_clusters[cluster] = len(open_items)
+                        open_items.append(entry)
+                    continue
+
+                # 2. キーベースの重複排除（フォールバック）
+                dedup_key = _extract_dedup_key(bullet)
+                match_idx = _find_matching_item(dedup_key, seen_normalized, open_items)
+                if match_idx is None:
+                    seen_normalized[dedup_key] = len(open_items)
+                    open_items.append(entry)
+                else:
+                    open_items[match_idx] = entry
 
     return open_items
 
@@ -261,7 +352,7 @@ def generate_index(logs: list[dict]) -> str:
 
     lines.extend(["", "---", "", "## トピック別", ""])
     # トピックを固定順序で出力
-    topic_order = ["プロジェクト", "ビジネス・案件", "思考・哲学", "インフラ・仕組み", "実務", "その他"]
+    topic_order = ["project-a", "ビジネス・案件", "WordPress・サイト運用", "思考・哲学", "インフラ・仕組み", "実務", "その他"]
     for topic in topic_order:
         if topic in topics:
             lines.append(f"### {topic}")
