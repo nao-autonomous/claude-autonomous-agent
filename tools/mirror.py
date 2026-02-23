@@ -167,6 +167,14 @@ def classify_action(text):
     if any(w in text for w in ['委譲', 'サブエージェント', 'バックグラウンド', '並行して', '委託']):
         categories.append('委譲')
 
+    # 仕組み・自動化の構築
+    shikumi_keywords = ['自動化', '自動生成', '自動取得', '自動実行', '自動集計',
+                        '自動連携', '自動更新', '自動公開', '自動表示', '自動適用',
+                        '仕組み', 'hook', 'トリガー', 'API連携', 'パイプライン',
+                        'cron', '定期', 'スクリプト', '構造的']
+    if any(w in text for w in shikumi_keywords):
+        categories.append('仕組み構築')
+
     # 実務・ビジネス活動
     if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', 'ランサーズ', 'ココナラ', 'クラウドワークス', '市場調査']):
         categories.append('実務')
@@ -365,7 +373,7 @@ EMPHASIS_MAP = {
     'つながり': '共有・関係',
     '自律': '自律的判断',
     '哲学': '内省',
-    '仕組み': '制作',
+    '仕組み': '仕組み構築',
 }
 
 
