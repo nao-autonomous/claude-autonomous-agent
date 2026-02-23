@@ -211,7 +211,13 @@ def curate_open_items(raw_items: list[str], today: str) -> str:
     actionable = []
     consideration = []
 
-    for item in raw_items:
+    # 解決済み項目をフィルタ（取り消し線、修正済み表記など）
+    resolved_patterns = re.compile(
+        r"~~.*~~|→\s*(修正完了|対応済み|セッション\d+で修正|完了|解決済み)"
+    )
+    filtered_items = [item for item in raw_items if not resolved_patterns.search(item)]
+
+    for item in filtered_items:
         cat = _categorize_open_item(item)
         if cat == "waiting":
             waiting.append(item)
@@ -244,6 +250,7 @@ def curate_open_items(raw_items: list[str], today: str) -> str:
 
     result = []
     total_shown = 0
+    total_all = len(waiting) + len(actionable) + len(consideration)
 
     if waiting:
         result.append("**外部待ち:**")

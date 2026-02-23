@@ -174,6 +174,9 @@ def _is_observation(bullet: str) -> bool:
         # 学び・気づきの記録
         r"原則.*通り", r"原則に従って", r"パターン.*再現",
         r"戦略が再現", r"組み合わせ戦略",
+        # 方向性の確認・定着した知見（アクションではなく気づき）
+        r"方向性.*明確になった", r"方向転換.*適切",
+        r"こそ.*価値がある", r"視点の欠如.*気づき",
         # 過去の行動の記述
         r"使えた$", r"選んだ$",
         # 過去の対話の記録
@@ -197,22 +200,28 @@ def _get_topic_cluster(bullet: str) -> str | None:
     一つにまとめるために使う。クラスタ内では最新のエントリのみ保持する。
     """
     # トピッククラスタ定義: (パターン, クラスタ名)
-    # 順序重要 — 全体ステータスを個別案件より先に（リスト内の個別名に引っかからないように）
+    # 順序重要 — 具体的な案件名を先に（一般パターンより優先）
     topic_clusters = [
+        # 具体的な案件名を先に（一般パターンより優先）
+        (r"keyword.*research", "keyword-research"),
+        (r"QRコード", "QRコード案件"),
+        (r"ChatGPT案件", "ChatGPT案件"),
+        (r"education.*project|education.*proposal", "education-project"),
+        (r"promo.*image", "promo-image"),
+        # 全体ステータス（個別案件にマッチしなかったもの用）
         (r"応募.*待ち|応募.*件|応募ステータス", "応募状況"),
         (r"listing.*live|listing.*status|listing.*pending", "listing-status"),
-        (r"education.*project|education.*proposal", "education-project"),
+        # 他のトピック
         (r"在庫管理", "在庫管理"),
         (r"project.*title", "project-title"),
         (r"イラストマップ", "イラストマップ"),
         (r"analytics.*API", "analytics-API"),
-        (r"promo.*image", "promo-image"),
         (r"スニペット.*残っている|テストスニペット", "テストスニペット"),
         (r"site-a.*CTA", "site-a-CTA"),
         (r"site-b.*WAF", "site-b-WAF"),
-        (r"keyword.*research", "keyword-research"),
-        (r"QRコード", "QRコード案件"),
-        (r"ChatGPT案件", "ChatGPT案件"),
+        (r"drink.*menu", "drink-menu"),
+        (r"event.*requirements|event.*confirm", "event-requirements"),
+        (r"business.*profile.*API", "business-profile-API"),
     ]
     for pattern, cluster in topic_clusters:
         if re.search(pattern, bullet):
@@ -238,6 +247,9 @@ def extract_open_items(logs: list[dict]) -> list[str]:
     exclude_patterns = [
         r"\[x\]", r"✅", r"解決", r"完了", r"追記済み",
         r"補完$", r"引き継いだ", r"追記$", r"記録$",
+        r"修正済み", r"対応済み", r"デプロイ済み",
+        r"~~.*~~",  # 取り消し線
+        r"精度改善.*反映",  # INDEX.md修正報告
     ]
     trigger_combined = "|".join(trigger_patterns)
     exclude_combined = "|".join(exclude_patterns)
@@ -272,6 +284,44 @@ def extract_open_items(logs: list[dict]) -> list[str]:
                     open_items.append(entry)
                 else:
                     open_items[match_idx] = entry
+
+    # Resolution pass: セッションタイトルやバレットから解決済みトピックを検出し、
+    # 対応する未解決項目を除外する
+    resolved_keywords = set()
+    resolution_re = re.compile(r"修正|fix|完了|解決|デプロイ済み")
+    for log in logs:
+        for session in log["sessions"]:
+            title = session.get("title", "")
+            # セッションタイトルから解決トピックを抽出
+            # 例: "PHP Warning修正 + 空き家バンク保守" → "PHP Warning"
+            if resolution_re.search(title):
+                # 「修正」「完了」等の前にある単語群を抽出
+                parts = re.split(r"修正|fix|完了|解決", title)
+                for part in parts[:-1]:  # 最後の部分は修正の後なので除外
+                    # 「:」以降を取り、「+」で分割
+                    if ":" in part:
+                        part = part.split(":")[-1]
+                    for subpart in part.split("+"):
+                        keyword = subpart.strip().strip("*").strip()
+                        if keyword and len(keyword) >= 3:
+                            resolved_keywords.add(keyword.lower())
+
+    # .resolved ファイルから明示的な解決済みキーワードを読み込む
+    resolved_file = LOGS_DIR / ".resolved"
+    if resolved_file.exists():
+        for line in resolved_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                resolved_keywords.add(line.lower())
+
+    if resolved_keywords:
+        filtered = []
+        for item in open_items:
+            item_lower = item.lower()
+            if any(kw in item_lower for kw in resolved_keywords):
+                continue
+            filtered.append(item)
+        open_items = filtered
 
     return open_items
 
