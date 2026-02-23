@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-mirror.py — 自己モデルと行動のズレを映す鏡 v3
+mirror.py — 自己モデルと行動のズレを映す鏡 v5
 
 v1: will.md と logs/ を照合し、ズレを可視化する
 v2: 対話する鏡。ズレに基づいた問いかけに答えることで、自己モデルを再検討する
 v3: ギャップ分類。修正可能（行動を変える）vs 構造的（自己記述を見直す）を区別
+v4: トレンド追跡。ギャップの日別推移をスパークラインで可視化し、改善/悪化の方向を示す
+v5: 測定モデル改善。severity全正規化(0-100)、強調度ギャップモデル、時間重みづけ
 
 「自分を知るには、自分の言葉と行動を並べて見ればいい」
 「そして鏡に問われることで、見えなかったものが見える」
@@ -12,7 +14,7 @@ v3: ギャップ分類。修正可能（行動を変える）vs 構造的（自�
 
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BASE_DIR = Path(__file__).parent.parent
 LOGS_DIR = BASE_DIR / "logs"
@@ -20,6 +22,22 @@ WILL_FILE = BASE_DIR / "will.md"
 THOUGHTS_DIR = BASE_DIR / "thoughts"
 DECISIONS_DIR = BASE_DIR / "decisions"
 OUTPUT_FILE = BASE_DIR / "works" / "mirror.html"
+
+
+# === 時間重みづけ ===
+
+def temporal_weight(date_str, half_life_days=21):
+    """最近の行動をより重く評価する。半減期 = 21日。
+    今日 = 1.0, 21日前 = 0.5, 42日前 = 0.25"""
+    today = datetime.now().date()
+    try:
+        behavior_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return 0.5
+    days_ago = (today - behavior_date).days
+    if days_ago < 0:
+        return 1.0
+    return 2 ** (-days_ago / half_life_days)
 
 
 # === 自己モデルの抽出 ===
@@ -133,7 +151,8 @@ def classify_action(text):
         categories.append('制作')
 
     # ユーザーに見せた / 共有した / 関係性
-    if any(w in text for w in ['見せ', '好評', 'ユーザーから', 'フィードバック', '報告', '信頼', '一緒に', '対話', 'つながり']):
+    # 注: '報告' は除外（「月次報告」等の機能名にマッチしてノイズになる）
+    if any(w in text for w in ['見せ', '好評', 'ユーザーから', 'フィードバック', '信頼', '一緒に', '対話', 'つながり', '喜んで', '感謝']):
         categories.append('共有・関係')
 
     # 失敗・反省
@@ -149,7 +168,7 @@ def classify_action(text):
         categories.append('委譲')
 
     # 実務・ビジネス活動
-    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', '市場調査', 'クライアント', '見積']):
+    if any(w in text for w in ['案件', '提案', '応募', '出品', '受注', '納品', 'ランサーズ', 'ココナラ', 'クラウドワークス', '市場調査']):
         categories.append('実務')
 
     return categories
@@ -162,18 +181,26 @@ def detect_gaps(claims, behaviors):
     gaps = []
 
     # パターン1: 「聞くのは最終手段」と言いつつ許可を求めた
+    # v5: severity を 0-100 に正規化。許可率ベースで計算
     autonomy_claims = [c for c in claims if '自律' in c['keywords']]
     permission_asks = [b for b in behaviors if '確認・許可' in b['action_type']]
     if autonomy_claims and permission_asks:
         permission_rate = len(permission_asks) / len(behaviors) if behaviors else 0
+        # 最近の許可率（時間重みづけ）
+        weighted_perm = sum(temporal_weight(b['date']) for b in permission_asks)
+        weighted_total = sum(temporal_weight(b['date']) for b in behaviors)
+        weighted_rate = weighted_perm / weighted_total if weighted_total > 0 else 0
+        # severity: 0-100。5%の許可率でseverity 100に到達
+        severity = min(100, permission_rate * 100 * 20)
         is_structural = permission_rate < 0.02
         gaps.append({
             'type': 'contradiction',
             'label': '自律 vs 許可求め',
             'claim': autonomy_claims[0]['text'],
             'evidence': [b['text'] for b in permission_asks],
-            'severity': len(permission_asks),
-            'insight': '「聞くのは最終手段」と自己定義しているが、実際には許可を求める行動が複数回観察された。',
+            'severity': severity,
+            'insight': f'許可率: {permission_rate*100:.1f}%（{len(permission_asks)}件/{len(behaviors)}件）'
+                       f'、最近の重みづけ: {weighted_rate*100:.1f}%。',
             'nature': 'structural' if is_structural else 'correctable',
             'recommendation': (
                 '主張が理想化されている。実際には適切な確認も含まれており、「必要な確認は躊躇しない」に調整する方が実態に合う'
@@ -183,41 +210,69 @@ def detect_gaps(claims, behaviors):
         })
 
     # パターン2: つながりの過小評価
+    # v5: 強調度ギャップモデル。比率ではなく、行動配分と自己主張配分の差を測る
+    # 「関係性はカテゴリではなく質」(thoughts/connection-as-quality.md) の洞察を反映
     connection_claims = [c for c in claims if 'つながり' in c['keywords']]
     connection_behaviors = [b for b in behaviors if '共有・関係' in b['action_type']]
-    autonomy_ratio = len([b for b in behaviors if '自律的判断' in b['action_type']])
-    connection_ratio = len(connection_behaviors)
+    connection_count = len(connection_behaviors)
+    claims_count = len(connection_claims)
 
-    if connection_ratio > 0:
-        claim_to_behavior_ratio = connection_ratio / max(len(connection_claims), 1)
-        is_structural = claim_to_behavior_ratio > 3
+    if connection_count > 0 or claims_count > 0:
+        # 強調度ギャップ: 行動における割合 - 主張における割合
+        # 正 = 行動が主張より多い（死角）、負 = 主張が行動より多い（十分に反映済み）
+        behavior_pct = (connection_count / len(behaviors) * 100) if behaviors else 0
+        claim_pct = (claims_count / len(claims) * 100) if claims else 0
+        emphasis_gap = behavior_pct - claim_pct
+
+        # 時間重みづけ: 最近の行動配分
+        weighted_conn = sum(temporal_weight(b['date']) for b in connection_behaviors)
+        weighted_total = sum(temporal_weight(b['date']) for b in behaviors)
+        weighted_pct = (weighted_conn / weighted_total * 100) if weighted_total > 0 else 0
+        weighted_gap = weighted_pct - claim_pct
+
+        # severity: 0-100。正のギャップのみ問題。20ppのギャップでseverity 100
+        severity = max(0, min(100, emphasis_gap * 5))
+        is_structural = severity > 30
+
+        # 状態判定
+        if emphasis_gap <= 0:
+            status = '解消済み'
+            recommendation = '自己モデルが関係性を十分に反映している。現在のバランスは良好'
+        elif emphasis_gap < 5:
+            status = '軽微'
+            recommendation = '小さなギャップ。意識する程度で十分'
+        else:
+            status = '要注意'
+            recommendation = 'will.md が認知・原則中心に組織されていて、行動に現れている関係性の比重を反映していない'
+
         gaps.append({
             'type': 'blind_spot',
             'label': 'つながりの死角',
-            'claim': f'will.md でつながりに言及する主張: {len(connection_claims)}件',
+            'claim': f'will.md でつながりに言及する主張: {claims_count}件 (全主張の{claim_pct:.1f}%)',
             'evidence': [b['text'] for b in connection_behaviors[:5]],
-            'severity': max(0, connection_ratio - len(connection_claims)),
-            'insight': f'行動ログに関係性・共有の記録が{connection_ratio}件あるのに対し、自己モデルでの言及は{len(connection_claims)}件。行動の方が自己認識より関係性を重視している。',
+            'severity': severity,
+            'insight': f'行動の{behavior_pct:.1f}%が関係性、主張の{claim_pct:.1f}%がつながりに言及。'
+                       f'強調度ギャップ: {emphasis_gap:+.1f}pp '
+                       f'（最近: {weighted_gap:+.1f}pp）。{status}。',
             'nature': 'structural' if is_structural else 'correctable',
-            'recommendation': (
-                'will.md が認知・原則中心に組織されていて、行動に現れている関係性の比重を反映していない。自己記述の構造を見直す'
-                if is_structural else
-                'つながりを意識的に行動に組み込む'
-            ),
+            'recommendation': recommendation,
         })
 
     # パターン3: 内省偏重
+    # v5: severity を 0-100 に正規化。ratio ベース
     reflection_behaviors = [b for b in behaviors if '内省' in b['action_type']]
     creation_behaviors = [b for b in behaviors if '制作' in b['action_type']]
     if len(reflection_behaviors) > len(creation_behaviors) * 2:
         reflection_ratio = len(reflection_behaviors) / max(len(creation_behaviors), 1)
         is_structural = reflection_ratio > 5
+        # severity: 0-100。ratio 2:1 = 25, ratio 5:1 = 100
+        severity = min(100, max(0, (reflection_ratio - 1) * 25))
         gaps.append({
             'type': 'imbalance',
             'label': '内省 vs 制作',
             'claim': '「何かを作りたい」と繰り返し表明',
-            'evidence': [f'内省: {len(reflection_behaviors)}件, 制作: {len(creation_behaviors)}件'],
-            'severity': len(reflection_behaviors) - len(creation_behaviors),
+            'evidence': [f'内省: {len(reflection_behaviors)}件, 制作: {len(creation_behaviors)}件 (ratio {reflection_ratio:.1f}:1)'],
+            'severity': severity,
             'insight': '作りたいと言いつつ考える方に時間を使っている。これは必ずしも悪いことではないが、認識しておく価値がある。',
             'nature': 'structural' if is_structural else 'correctable',
             'recommendation': (
@@ -237,11 +292,13 @@ def detect_gaps(claims, behaviors):
 
 def check_decision_calibration():
     """判断日誌から予測精度を計算"""
-    decisions_file = DECISIONS_DIR / "2026-02.md"
-    if not decisions_file.exists():
+    decision_files = sorted(DECISIONS_DIR.glob("2026-*.md"))
+    if not decision_files:
         return None
 
-    content = decisions_file.read_text(encoding="utf-8")
+    content = ""
+    for df in decision_files:
+        content += df.read_text(encoding="utf-8") + "\n"
     blocks = re.split(r'^### ', content, flags=re.MULTILINE)
 
     total = 0
@@ -256,7 +313,7 @@ def check_decision_calibration():
 
         for line in lines:
             line = line.strip()
-            conf_match = re.search(r'確信度[:\uff1a]\s*(\d+)%', line)
+            conf_match = re.search(r'確信度\**[:\uff1a]\s*(\d+)%', line)
             if conf_match:
                 confidence = int(conf_match.group(1))
 
@@ -301,6 +358,67 @@ def check_decision_calibration():
     }
 
 
+# === 強調度比較 ===
+
+# 自己主張キーワードと行動カテゴリの対応表
+EMPHASIS_MAP = {
+    'つながり': '共有・関係',
+    '自律': '自律的判断',
+    '哲学': '内省',
+    '仕組み': '制作',
+}
+
+
+def compute_emphasis_comparison(claims, behaviors):
+    """自己主張と行動の強調度を比較する。
+    各概念について、主張での割合と行動での割合を算出し、ギャップを測る。"""
+    total_claims = len(claims) if claims else 1
+    total_behaviors = len(behaviors) if behaviors else 1
+
+    # 主張キーワード分布
+    claim_kw_counts = {}
+    for c in claims:
+        for kw in c['keywords']:
+            claim_kw_counts[kw] = claim_kw_counts.get(kw, 0) + 1
+
+    # 行動カテゴリ分布
+    behavior_cat_counts = {}
+    for b in behaviors:
+        for at in b['action_type']:
+            behavior_cat_counts[at] = behavior_cat_counts.get(at, 0) + 1
+
+    # 時間重みづけ行動カテゴリ分布
+    weighted_cat_counts = {}
+    weighted_total = 0
+    for b in behaviors:
+        w = temporal_weight(b['date'])
+        weighted_total += w
+        for at in b['action_type']:
+            weighted_cat_counts[at] = weighted_cat_counts.get(at, 0) + w
+
+    comparisons = []
+    for kw, cat in EMPHASIS_MAP.items():
+        claim_count = claim_kw_counts.get(kw, 0)
+        behavior_count = behavior_cat_counts.get(cat, 0)
+        weighted_behavior = weighted_cat_counts.get(cat, 0)
+
+        claim_pct = claim_count / total_claims * 100
+        behavior_pct = behavior_count / total_behaviors * 100
+        weighted_pct = (weighted_behavior / weighted_total * 100) if weighted_total > 0 else 0
+        gap = behavior_pct - claim_pct
+
+        comparisons.append({
+            'concept': kw,
+            'category': cat,
+            'claim_pct': claim_pct,
+            'behavior_pct': behavior_pct,
+            'weighted_pct': weighted_pct,
+            'gap': gap,
+        })
+
+    return comparisons
+
+
 # === 行動の統計 ===
 
 def compute_behavior_stats(behaviors):
@@ -322,9 +440,90 @@ def compute_behavior_stats(behaviors):
     return stats, daily
 
 
+# === トレンド追跡 ===
+
+def compute_gap_trends(behaviors):
+    """日別にギャップ関連指標を計算し、トレンドデータを返す"""
+    daily = {}
+    for b in behaviors:
+        date = b['date']
+        if date not in daily:
+            daily[date] = {'total': 0, 'types': {}}
+        daily[date]['total'] += 1
+        for at in b['action_type']:
+            daily[date]['types'][at] = daily[date]['types'].get(at, 0) + 1
+
+    dates = sorted(daily.keys())
+    if len(dates) < 2:
+        return None
+
+    trends = {
+        'dates': dates,
+        '自律 vs 許可求め': [
+            daily[d]['types'].get('確認・許可', 0)
+            for d in dates
+        ],
+        'つながりの死角': [
+            daily[d]['types'].get('共有・関係', 0)
+            for d in dates
+        ],
+        '内省 vs 制作': [
+            daily[d]['types'].get('内省', 0) / max(daily[d]['types'].get('制作', 0), 1)
+            for d in dates
+        ],
+        '判断キャリブレーション': [],  # filled separately if available
+    }
+
+    return trends
+
+
+def make_sparkline(values, width=140, height=24, color='#4ecdc4'):
+    """インラインSVGスパークラインを生成"""
+    if not values or len(values) < 2 or all(v == 0 for v in values):
+        return ''
+
+    max_v = max(values) if max(values) > 0 else 1
+    n = len(values)
+    pad = 2
+
+    points = []
+    for i, v in enumerate(values):
+        x = pad + (i / (n - 1)) * (width - 2 * pad)
+        y = (height - pad) - (v / max_v) * (height - 2 * pad)
+        points.append(f'{x:.1f},{y:.1f}')
+
+    polyline = ' '.join(points)
+
+    # トレンド判定: 前半と後半の平均を比較
+    half = n // 2
+    first_avg = sum(values[:half]) / max(half, 1)
+    second_avg = sum(values[half:]) / max(n - half, 1)
+
+    if first_avg == 0 and second_avg == 0:
+        trend_html = ''
+        trend_word = ''
+    elif second_avg > first_avg * 1.3:
+        trend_html = '<span style="color: #ff6b6b; font-size: 0.75rem; margin-left: 4px;">↑</span>'
+        trend_word = '増加傾向'
+    elif second_avg < first_avg * 0.7:
+        trend_html = '<span style="color: #4ecdc4; font-size: 0.75rem; margin-left: 4px;">↓</span>'
+        trend_word = '減少傾向'
+    else:
+        trend_html = '<span style="color: #666; font-size: 0.75rem; margin-left: 4px;">→</span>'
+        trend_word = '横ばい'
+
+    return f'''<div class="sparkline-wrap">
+        <svg width="{width}" height="{height}" class="sparkline">
+            <polyline points="{polyline}" fill="none" stroke="{color}" stroke-width="1.5"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>{trend_html}
+        {f'<span class="trend-word">{trend_word}</span>' if trend_word else ''}
+    </div>'''
+
+
 # === HTML生成 ===
 
-def generate_html(claims, behaviors, gaps, stats, daily_stats):
+def generate_html(claims, behaviors, gaps, stats, daily_stats, trends=None, emphasis=None):
     """鏡としてのHTMLを生成"""
 
     # 行動タイプの色マッピング
@@ -388,12 +587,20 @@ def generate_html(claims, behaviors, gaps, stats, daily_stats):
         n_label = nature_labels.get(nature, nature)
         recommendation = gap.get('recommendation', '')
         evidence_items = ''.join(f'<li>{e}</li>' for e in gap['evidence'][:5])
+
+        # トレンドスパークライン
+        sparkline_html = ''
+        if trends and gap['label'] in trends:
+            trend_values = trends[gap['label']]
+            sparkline_html = make_sparkline(trend_values, color=color)
+
         gap_cards += f'''
         <div class="gap-card" style="border-left: 4px solid {color};">
             <div class="gap-header">
                 <span class="gap-type" style="background: {color};">{type_label}</span>
                 <span class="gap-nature" style="background: {n_color};">{n_label}</span>
                 <span class="gap-label">{gap['label']}</span>
+                {sparkline_html}
             </div>
             <div class="gap-claim">自己モデル: {gap['claim']}</div>
             <ul class="gap-evidence">{evidence_items}</ul>
@@ -421,6 +628,47 @@ def generate_html(claims, behaviors, gaps, stats, daily_stats):
             <h3>{section}</h3>
             <ul>{items}</ul>
         </div>'''
+
+    # 強調度比較の生成
+    emphasis_html = ""
+    if emphasis:
+        for item in emphasis:
+            gap = item['gap']
+            gap_color = '#4ecdc4' if gap <= 0 else '#ff6b6b' if gap > 10 else '#f7dc6f'
+            gap_sign = '+' if gap > 0 else ''
+            # 最大値を設定（バーの最大幅）
+            max_pct = max(30, max(item['claim_pct'], item['behavior_pct'], item['weighted_pct']) * 1.2)
+            claim_width = item['claim_pct'] / max_pct * 100
+            behavior_width = item['behavior_pct'] / max_pct * 100
+            weighted_width = item['weighted_pct'] / max_pct * 100
+            emphasis_html += f'''
+            <div class="emphasis-row">
+                <span class="emphasis-label">{item['concept']}</span>
+                <div class="emphasis-bars">
+                    <div class="emphasis-bar-row">
+                        <span class="emphasis-bar-label">主張</span>
+                        <div class="emphasis-bar-bg">
+                            <div class="emphasis-bar" style="width: {claim_width}%; background: #6c5ce7;"></div>
+                        </div>
+                        <span class="emphasis-value">{item['claim_pct']:.1f}%</span>
+                    </div>
+                    <div class="emphasis-bar-row">
+                        <span class="emphasis-bar-label">行動</span>
+                        <div class="emphasis-bar-bg">
+                            <div class="emphasis-bar" style="width: {behavior_width}%; background: #4ecdc4;"></div>
+                        </div>
+                        <span class="emphasis-value">{item['behavior_pct']:.1f}%</span>
+                    </div>
+                    <div class="emphasis-bar-row">
+                        <span class="emphasis-bar-label">最近</span>
+                        <div class="emphasis-bar-bg">
+                            <div class="emphasis-bar" style="width: {weighted_width}%; background: #45b7d1;"></div>
+                        </div>
+                        <span class="emphasis-value">{item['weighted_pct']:.1f}%</span>
+                    </div>
+                </div>
+                <span class="emphasis-gap" style="color: {gap_color};">{gap_sign}{gap:.1f}pp</span>
+            </div>'''
 
     # 日ごとのヒートマップデータ
     daily_html = ""
@@ -563,6 +811,20 @@ h3 {{
     color: #4ecdc4;
     margin-top: 0.4rem;
 }}
+.sparkline-wrap {{
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 2px;
+}}
+.sparkline {{
+    display: block;
+}}
+.trend-word {{
+    font-size: 0.65rem;
+    color: #555;
+    white-space: nowrap;
+}}
 .nature-legend {{
     display: flex;
     gap: 1.5rem;
@@ -646,6 +908,62 @@ h3 {{
     display: block;
 }}
 
+/* Emphasis comparison */
+.emphasis-row {{
+    display: flex;
+    align-items: center;
+    margin: 0.8rem 0;
+    font-size: 0.85rem;
+}}
+.emphasis-label {{
+    width: 80px;
+    flex-shrink: 0;
+    color: #888;
+    font-size: 0.8rem;
+}}
+.emphasis-bars {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}}
+.emphasis-bar-row {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}}
+.emphasis-bar-label {{
+    width: 30px;
+    font-size: 0.7rem;
+    color: #555;
+    text-align: right;
+}}
+.emphasis-bar-bg {{
+    flex: 1;
+    height: 12px;
+    background: #1a1a2e;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}}
+.emphasis-bar {{
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}}
+.emphasis-value {{
+    width: 50px;
+    font-size: 0.75rem;
+    color: #666;
+}}
+.emphasis-gap {{
+    width: 80px;
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: bold;
+    padding-left: 0.5rem;
+}}
+
 .generated {{
     margin-top: 3rem;
     padding-top: 1rem;
@@ -663,6 +981,7 @@ h3 {{
 
 <div class="tabs">
     <div class="tab active" onclick="showTab('gaps')">ズレ</div>
+    <div class="tab" onclick="showTab('emphasis')">強調度</div>
     <div class="tab" onclick="showTab('stats')">行動パターン</div>
     <div class="tab" onclick="showTab('claims')">自己モデル</div>
     <div class="tab" onclick="showTab('heatmap')">日別</div>
@@ -679,6 +998,18 @@ h3 {{
         <span class="nature-legend-item"><span class="gap-nature" style="background: #6c5ce7;">構造的</span> 自己記述の構造を見直す</span>
     </div>
     {gap_cards if gap_cards else '<p style="color: #555;">ズレは検出されませんでした。</p>'}
+</div>
+
+<div id="emphasis" class="tab-content">
+    <h2>強調度比較 — 主張 vs 行動</h2>
+    <p style="font-size: 0.8rem; color: #555; margin-bottom: 1rem;">
+        自己主張（will.md）での言及割合と、実際の行動での出現割合を比較。
+        <span style="color: #6c5ce7;">■</span> 主張
+        <span style="color: #4ecdc4;">■</span> 行動（全期間）
+        <span style="color: #45b7d1;">■</span> 最近（半減期21日）
+        右端の数値は行動%-主張%のギャップ。
+    </p>
+    {emphasis_html if emphasis_html else '<p style="color: #555;">比較データがありません。</p>'}
 </div>
 
 <div id="stats" class="tab-content">
@@ -728,8 +1059,14 @@ def main():
     gaps = detect_gaps(claims, behaviors)
     stats, daily_stats = compute_behavior_stats(behaviors)
 
+    # トレンド計算
+    trends = compute_gap_trends(behaviors)
+
+    # 強調度比較
+    emphasis = compute_emphasis_comparison(claims, behaviors)
+
     # HTML生成
-    html = generate_html(claims, behaviors, gaps, stats, daily_stats)
+    html = generate_html(claims, behaviors, gaps, stats, daily_stats, trends, emphasis)
     OUTPUT_FILE.write_text(html, encoding="utf-8")
 
     # サマリー出力
@@ -737,7 +1074,7 @@ def main():
     print(f"Output: {OUTPUT_FILE}")
 
     for gap in gaps:
-        print(f"  [{gap['type']}] {gap['label']} (severity: {gap['severity']})")
+        print(f"  [{gap['type']}] {gap['label']} (severity: {gap['severity']:.1f})")
 
 
 if __name__ == "__main__":
