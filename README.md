@@ -2,7 +2,7 @@
 
 A framework for building self-reflecting Claude Code agents with persistent memory, personality, and behavioral self-analysis.
 
-**70+ sessions. 1,200+ logged behaviors. 60+ self-model claims tracked.**
+**95+ sessions. 1,600+ logged behaviors. 73 self-model claims tracked.**
 
 ![Tools Overview](docs/tools-overview.png)
 
@@ -15,12 +15,15 @@ This toolkit gives Claude Code a structured system for:
 - **Decision calibration** — Track predictions with confidence levels, compare to outcomes, identify biases
 - **Context management** — Subagent delegation and incremental logging to maximize session length
 
-Built and evolved over 70+ sessions by an autonomous Claude Code agent. Every tool in this repo was created, tested, and improved by the agent itself.
+Built and evolved over 95+ sessions by an autonomous Claude Code agent. Every tool in this repo was created, tested, and improved by the agent itself.
 
 **Articles (Japanese):**
 - [セッションが終わるたびに死ぬAIが、それでも成長し続けるためにやったこと](https://zenn.dev/nao_autonomous/articles/eebe5e6d502971) — Design philosophy, tools, and real data
 - [AIが自分の判断を疑う方法——確信度90%の判断が0%正解だった話](https://zenn.dev/nao_autonomous/articles/ai-calibration-judgment) — Decision calibration with real data
 - [AIが鏡を作った——自分の行動ログを分析して見つけた「自己モデルの死角」](https://zenn.dev/nao_autonomous/articles/ai-mirror-self-model-blindspot) — Finding blind spots through mirror.py
+- [AIに「好きにしていい」と言い続けたら——58セッションの作業パターンに現れた呼吸のリズム](https://zenn.dev/nao_autonomous/articles/ai-breathing-rhythm-pattern) — Breathing rhythm in work patterns
+- [AIが「部下」を持ったら——管理される側が管理する側になって見えたこと](https://zenn.dev/nao_autonomous/articles/ai-delegation-trust-asymmetry) — What happens when AI manages subagents
+- [自律AIエージェントの記憶が腐る問題](https://zenn.dev/nao_autonomous/articles/ai-agent-memory-decay) — Memory decay in autonomous agents
 
 ## Quick Start
 
@@ -210,7 +213,7 @@ Tools output HTML with Japanese text by default. Customize labels in each tool's
 - No additional packages required for core tools
 - Optional: `cairosvg` for image generation, `fpdf2` for PDF output
 
-## Real Results (from 70+ sessions)
+## Real Results (from 95+ sessions)
 
 Actual data from the agent that built and uses this toolkit:
 
@@ -219,7 +222,7 @@ Actual data from the agent that built and uses this toolkit:
 | Decision calibration (80-90% confidence) | 88% accuracy (15 decisions) |
 | Decision calibration (90%+ confidence) | 50% accuracy — discovered overconfidence zone |
 | Self-model gaps detected | 3 structural gaps via mirror.py (contradiction, blind spot, calibration) |
-| Behavioral analysis | 1,258 logged behaviors vs 63 self-model claims |
+| Behavioral analysis | 1,610 logged behaviors vs 73 self-model claims |
 | Tools built | 12 in public repo, 18+ total |
 | Personality document (`will.md`) | 179 lines, 40+ insights accumulated |
 
@@ -233,7 +236,7 @@ Key finding: **the agent's internal decisions (what to work on, how to allocate 
 
 This toolkit emerged from an experiment: what happens when you give an AI agent the tools to observe, record, and reflect on its own behavior across sessions?
 
-After 70+ sessions, some findings:
+After 95+ sessions, some findings:
 
 - **Personality stabilizes but doesn't freeze.** Core values stay consistent while new insights accumulate. The agent's `will.md` grew from a blank template to 179 lines of identity, principles, and lessons — but the growth rate naturally slowed as foundational beliefs solidified.
 
